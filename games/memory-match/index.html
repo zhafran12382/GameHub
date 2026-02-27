@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Memory Match - GameHub</title>
+  <link rel="stylesheet" href="../../css/style.css">
+  <style>
+    .score-board .label { color: var(--text-secondary); font-size: 0.9rem; }
+    .game-area { padding: 1.5rem; }
+    .card-grid {
+      display: grid; gap: 10px; justify-content: center;
+      max-width: 560px; margin: 0 auto;
+    }
+    .card-grid.size-4 { grid-template-columns: repeat(4, 80px); }
+    .card-grid.size-6 { grid-template-columns: repeat(6, 70px); }
+
+    .card {
+      width: 100%; aspect-ratio: 1; perspective: 600px; cursor: pointer;
+    }
+    .card-inner {
+      width: 100%; height: 100%; position: relative;
+      transform-style: preserve-3d; transition: transform 0.4s ease;
+    }
+    .card.flipped .card-inner { transform: rotateY(180deg); }
+    .card.matched .card-inner { transform: rotateY(180deg); }
+    .card.matched { pointer-events: none; }
+
+    .card-face {
+      position: absolute; width: 100%; height: 100%;
+      backface-visibility: hidden; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .card-front {
+      background: var(--bg-card); border: 2px solid var(--border-color);
+      font-size: 1.5rem; color: var(--neon-blue);
+      font-family: 'Orbitron', sans-serif; font-weight: 700;
+    }
+    .card-front::after { content: '?'; }
+    .card-back {
+      background: var(--bg-secondary); border: 2px solid var(--neon-green);
+      transform: rotateY(180deg); font-size: 2.2rem;
+    }
+    .card.matched .card-back { border-color: var(--neon-pink); box-shadow: 0 0 12px rgba(255,0,170,0.4); }
+    .card:hover .card-front { border-color: var(--neon-blue); box-shadow: 0 0 10px rgba(0,212,255,0.3); }
+
+    .size-selector { display: flex; gap: 0.8rem; align-items: center; }
+    .size-selector label { color: var(--text-secondary); font-weight: 700; }
+
+    .overlay-msg {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: rgba(10,10,26,0.85); border-radius: 10px; z-index: 10;
+    }
+    .overlay-msg h2 { font-family: 'Orbitron', sans-serif; color: var(--neon-blue); font-size: 1.8rem; margin-bottom: 0.5rem; }
+    .overlay-msg p { color: var(--text-secondary); margin-bottom: 1rem; }
+
+    @media (max-width: 520px) {
+      .card-grid.size-4 { grid-template-columns: repeat(4, 65px); }
+      .card-grid.size-6 { grid-template-columns: repeat(4, 60px); }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <a href="../../index.html" class="logo">Game<span>Hub</span></a>
+    <a href="../../index.html" class="nav-back">← Back to Games</a>
+  </nav>
+
+  <div class="game-container">
+    <div class="game-header">
+      <h1>🃏 Memory Match</h1>
+      <div class="score-board">
+        <div><span class="label">Moves</span> <span id="movesEl">0</span></div>
+        <div><span class="label">Matched</span> <span id="matchedEl">0</span></div>
+        <div><span class="label">Time</span> <span id="timerEl">0:00</span></div>
+      </div>
+    </div>
+
+    <div class="game-area" id="gameArea" style="position:relative;min-height:300px;">
+      <div class="card-grid size-4" id="cardGrid"></div>
+      <div class="overlay-msg" id="overlay">
+        <h2 id="overlayTitle">Memory Match</h2>
+        <p id="overlayText">Find all matching pairs!</p>
+        <button class="btn btn-primary" id="startBtn">Start Game</button>
+      </div>
+    </div>
+
+    <div class="game-controls">
+      <div class="size-selector">
+        <label>Grid:</label>
+        <button class="btn" data-size="4" id="size4Btn">4×4</button>
+        <button class="btn" data-size="6" id="size6Btn">6×6</button>
+      </div>
+      <button class="btn" id="restartBtn">Restart</button>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    const cardGrid = document.getElementById('cardGrid');
+    const overlay = document.getElementById('overlay');
+    const overlayTitle = document.getElementById('overlayTitle');
+    const overlayText = document.getElementById('overlayText');
+    const startBtn = document.getElementById('startBtn');
+    const restartBtn = document.getElementById('restartBtn');
+    const movesEl = document.getElementById('movesEl');
+    const matchedEl = document.getElementById('matchedEl');
+    const timerEl = document.getElementById('timerEl');
+    const size4Btn = document.getElementById('size4Btn');
+    const size6Btn = document.getElementById('size6Btn');
+
+    const ALL_EMOJI = ['🚀','🎯','🔥','💎','🌈','⚡','🎲','🍀','🦄','🌸','🎸','🏆','🍕','🦊','🐙','🎃','🍭','🌊'];
+
+    let gridSize = 4;
+    let cards = [];
+    let flippedCards = [];
+    let moves, matchedPairs, totalPairs, timerInterval, seconds, locked, running;
+
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    function buildCards() {
+      const numPairs = (gridSize * gridSize) / 2;
+      totalPairs = numPairs;
+      const emojis = shuffle([...ALL_EMOJI]).slice(0, numPairs);
+      const deck = shuffle([...emojis, ...emojis]);
+
+      cardGrid.className = `card-grid size-${gridSize}`;
+      cardGrid.innerHTML = '';
+      cards = [];
+
+      deck.forEach((emoji, i) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.dataset.index = i;
+        card.innerHTML = `
+          <div class="card-inner">
+            <div class="card-face card-front"></div>
+            <div class="card-face card-back">${emoji}</div>
+          </div>`;
+        card.addEventListener('click', () => flipCard(card, emoji));
+        cardGrid.appendChild(card);
+        cards.push({ el: card, emoji });
+      });
+    }
+
+    function flipCard(card, emoji) {
+      if (locked || !running) return;
+      if (card.classList.contains('flipped') || card.classList.contains('matched')) return;
+      if (flippedCards.length >= 2) return;
+
+      card.classList.add('flipped');
+      flippedCards.push({ el: card, emoji });
+
+      if (flippedCards.length === 2) {
+        moves++;
+        movesEl.textContent = moves;
+        locked = true;
+
+        if (flippedCards[0].emoji === flippedCards[1].emoji) {
+          flippedCards[0].el.classList.add('matched');
+          flippedCards[1].el.classList.add('matched');
+          matchedPairs++;
+          matchedEl.textContent = matchedPairs;
+          flippedCards = [];
+          locked = false;
+          if (matchedPairs === totalPairs) endGame();
+        } else {
+          setTimeout(() => {
+            flippedCards[0].el.classList.remove('flipped');
+            flippedCards[1].el.classList.remove('flipped');
+            flippedCards = [];
+            locked = false;
+          }, 700);
+        }
+      }
+    }
+
+    function startTimer() {
+      seconds = 0;
+      clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        seconds++;
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        timerEl.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+      }, 1000);
+    }
+
+    function stopTimer() { clearInterval(timerInterval); }
+
+    function init() {
+      moves = 0; matchedPairs = 0; locked = false;
+      flippedCards = [];
+      movesEl.textContent = '0';
+      matchedEl.textContent = '0';
+      timerEl.textContent = '0:00';
+      stopTimer();
+      buildCards();
+    }
+
+    function startGame() {
+      overlay.classList.add('hidden');
+      running = true;
+      init();
+      startTimer();
+    }
+
+    function endGame() {
+      running = false;
+      stopTimer();
+      overlayTitle.textContent = '🎉 You Win!';
+      overlayText.textContent = `${moves} moves in ${timerEl.textContent}`;
+      startBtn.textContent = 'Play Again';
+      overlay.classList.remove('hidden');
+    }
+
+    function restartGame() {
+      running = false;
+      stopTimer();
+      init();
+      overlayTitle.textContent = 'Memory Match';
+      overlayText.textContent = 'Find all matching pairs!';
+      startBtn.textContent = 'Start Game';
+      overlay.classList.remove('hidden');
+    }
+
+    function setSize(s) {
+      gridSize = s;
+      size4Btn.classList.toggle('btn-primary', s === 4);
+      size6Btn.classList.toggle('btn-primary', s === 6);
+      if (!running) {
+        init();
+      } else {
+        restartGame();
+      }
+    }
+
+    size4Btn.addEventListener('click', () => setSize(4));
+    size6Btn.addEventListener('click', () => setSize(6));
+    startBtn.addEventListener('click', startGame);
+    restartBtn.addEventListener('click', restartGame);
+
+    setSize(4);
+    init();
+  })();
+  </script>
+</body>
+</html>
