@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simon Says - GameHub</title>
+  <link rel="stylesheet" href="../../css/style.css">
+  <style>
+    .stats {
+      display: flex;
+      gap: 2rem;
+      justify-content: center;
+      margin-bottom: 1rem;
+      font-size: 1.1rem;
+    }
+    .stats .label { color: var(--text-secondary); }
+    .stats .value {
+      color: var(--neon-green);
+      font-weight: 700;
+      font-family: 'Orbitron', sans-serif;
+    }
+    .simon-board {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      width: 320px;
+      height: 320px;
+      padding: 1.5rem;
+    }
+    .simon-btn {
+      border-radius: 16px;
+      border: 3px solid transparent;
+      cursor: pointer;
+      transition: filter 0.1s ease, transform 0.1s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .simon-btn:active { transform: scale(0.96); }
+    .simon-btn.disabled {
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
+    .simon-btn[data-color="green"] {
+      background: #00994d;
+      border-color: #004d26;
+    }
+    .simon-btn[data-color="red"] {
+      background: #cc0033;
+      border-color: #660019;
+    }
+    .simon-btn[data-color="yellow"] {
+      background: #ccaa00;
+      border-color: #665500;
+    }
+    .simon-btn[data-color="blue"] {
+      background: #0055cc;
+      border-color: #002a66;
+    }
+    .simon-btn[data-color="green"].lit {
+      background: #00ff88;
+      box-shadow: 0 0 30px rgba(0, 255, 136, 0.7), inset 0 0 20px rgba(0, 255, 136, 0.3);
+    }
+    .simon-btn[data-color="red"].lit {
+      background: #ff3366;
+      box-shadow: 0 0 30px rgba(255, 51, 102, 0.7), inset 0 0 20px rgba(255, 51, 102, 0.3);
+    }
+    .simon-btn[data-color="yellow"].lit {
+      background: #ffdd00;
+      box-shadow: 0 0 30px rgba(255, 221, 0, 0.7), inset 0 0 20px rgba(255, 221, 0, 0.3);
+    }
+    .simon-btn[data-color="blue"].lit {
+      background: #00aaff;
+      box-shadow: 0 0 30px rgba(0, 170, 255, 0.7), inset 0 0 20px rgba(0, 170, 255, 0.3);
+    }
+    .status-text {
+      text-align: center;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.1rem;
+      margin-top: 1rem;
+      min-height: 1.8rem;
+      color: var(--text-secondary);
+    }
+    .status-text.watching { color: var(--neon-yellow); }
+    .status-text.playing { color: var(--neon-green); }
+    .status-text.wrong { color: var(--neon-pink); }
+    .instructions {
+      color: var(--text-secondary);
+      text-align: center;
+      margin-top: 1rem;
+      font-size: 0.9rem;
+    }
+    .overlay { display: none; }
+    .overlay.active { display: flex; }
+    .final-score {
+      font-size: 2.5rem;
+      color: var(--neon-green);
+      font-family: 'Orbitron', sans-serif;
+      margin: 0.5rem 0 1rem;
+    }
+    @media (max-width: 480px) {
+      .simon-board { width: 260px; height: 260px; gap: 8px; padding: 1rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <a href="../../index.html" class="logo">Game<span>Hub</span></a>
+    <a href="../../index.html" class="nav-back">← Back to Games</a>
+  </nav>
+
+  <div class="game-container">
+    <div class="game-header">
+      <h1>🎵 Simon Says</h1>
+      <div class="stats">
+        <div><span class="label">Round: </span><span class="value" id="round">0</span></div>
+        <div><span class="label">High Score: </span><span class="value" id="highScore">0</span></div>
+      </div>
+    </div>
+
+    <div class="game-area simon-board" id="board">
+      <button class="simon-btn disabled" data-color="green"></button>
+      <button class="simon-btn disabled" data-color="red"></button>
+      <button class="simon-btn disabled" data-color="yellow"></button>
+      <button class="simon-btn disabled" data-color="blue"></button>
+    </div>
+
+    <div class="status-text" id="status">Press Start to play!</div>
+
+    <div class="game-controls">
+      <button class="btn btn-primary" id="startBtn">Start Game</button>
+    </div>
+    <p class="instructions">Watch the sequence, then repeat it. Each round adds one more step!</p>
+  </div>
+
+  <div class="overlay" id="gameOverOverlay">
+    <div class="modal">
+      <h2>Game Over!</h2>
+      <p>You got the wrong color.</p>
+      <div class="final-score" id="finalScore">0</div>
+      <p id="resultMsg">rounds completed</p>
+      <button class="btn btn-primary" id="restartBtn">Play Again</button>
+    </div>
+  </div>
+
+  <script>
+    const COLORS = ['green', 'red', 'yellow', 'blue'];
+    const FREQUENCIES = { green: 392, red: 523.25, yellow: 659.25, blue: 783.99 };
+    const buttons = document.querySelectorAll('.simon-btn');
+    const statusEl = document.getElementById('status');
+
+    let sequence = [];
+    let playerIndex = 0;
+    let round = 0;
+    let highScore = parseInt(localStorage.getItem('simon_highscore')) || 0;
+    let acceptInput = false;
+    let audioCtx = null;
+
+    document.getElementById('highScore').textContent = highScore;
+
+    function getAudioCtx() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      return audioCtx;
+    }
+
+    function playTone(color, duration) {
+      try {
+        const ctx = getAudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = FREQUENCIES[color];
+        gain.gain.value = 0.3;
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration / 1000);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + duration / 1000);
+      } catch (e) { /* audio not available */ }
+    }
+
+    function playErrorTone() {
+      try {
+        const ctx = getAudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.value = 100;
+        gain.gain.value = 0.3;
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.5);
+      } catch (e) { /* audio not available */ }
+    }
+
+    function lightUp(color, duration) {
+      return new Promise(resolve => {
+        const btn = document.querySelector(`.simon-btn[data-color="${color}"]`);
+        btn.classList.add('lit');
+        playTone(color, duration);
+        setTimeout(() => {
+          btn.classList.remove('lit');
+          setTimeout(resolve, 100);
+        }, duration);
+      });
+    }
+
+    async function playSequence() {
+      acceptInput = false;
+      setButtonsDisabled(true);
+      statusEl.textContent = 'Watch carefully...';
+      statusEl.className = 'status-text watching';
+
+      await sleep(500);
+
+      const speed = Math.max(250, 600 - round * 30);
+
+      for (const color of sequence) {
+        await lightUp(color, speed);
+      }
+
+      acceptInput = true;
+      playerIndex = 0;
+      setButtonsDisabled(false);
+      statusEl.textContent = 'Your turn!';
+      statusEl.className = 'status-text playing';
+    }
+
+    function nextRound() {
+      round++;
+      document.getElementById('round').textContent = round;
+      const nextColor = COLORS[Math.floor(Math.random() * 4)];
+      sequence.push(nextColor);
+      playSequence();
+    }
+
+    function handlePress(color) {
+      if (!acceptInput) return;
+
+      const btn = document.querySelector(`.simon-btn[data-color="${color}"]`);
+      btn.classList.add('lit');
+      playTone(color, 200);
+      setTimeout(() => btn.classList.remove('lit'), 200);
+
+      if (color === sequence[playerIndex]) {
+        playerIndex++;
+        if (playerIndex === sequence.length) {
+          acceptInput = false;
+          setButtonsDisabled(true);
+          statusEl.textContent = 'Correct! ✓';
+          statusEl.className = 'status-text playing';
+          setTimeout(nextRound, 800);
+        }
+      } else {
+        gameOver();
+      }
+    }
+
+    function gameOver() {
+      acceptInput = false;
+      setButtonsDisabled(true);
+      playErrorTone();
+
+      // Flash all buttons red
+      buttons.forEach(b => b.classList.add('lit'));
+      setTimeout(() => buttons.forEach(b => b.classList.remove('lit')), 300);
+
+      statusEl.textContent = 'Wrong! Game Over';
+      statusEl.className = 'status-text wrong';
+
+      const completed = round - 1;
+      if (completed > highScore) {
+        highScore = completed;
+        localStorage.setItem('simon_highscore', highScore);
+        document.getElementById('highScore').textContent = highScore;
+      }
+
+      document.getElementById('finalScore').textContent = completed;
+      const msg = completed >= 15 ? '🏆 Incredible memory!' : completed >= 10 ? '🎉 Amazing!' : completed >= 5 ? '👍 Nice job!' : 'Keep practicing!';
+      document.getElementById('resultMsg').textContent = msg;
+
+      setTimeout(() => {
+        document.getElementById('gameOverOverlay').classList.add('active');
+      }, 600);
+
+      document.getElementById('startBtn').textContent = 'Start Game';
+      document.getElementById('startBtn').disabled = false;
+    }
+
+    function setButtonsDisabled(disabled) {
+      buttons.forEach(b => {
+        if (disabled) b.classList.add('disabled');
+        else b.classList.remove('disabled');
+      });
+    }
+
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    function startGame() {
+      sequence = [];
+      round = 0;
+      playerIndex = 0;
+      document.getElementById('round').textContent = 0;
+      document.getElementById('gameOverOverlay').classList.remove('active');
+      document.getElementById('startBtn').textContent = 'Running...';
+      document.getElementById('startBtn').disabled = true;
+      nextRound();
+    }
+
+    buttons.forEach(btn => {
+      btn.addEventListener('click', () => handlePress(btn.dataset.color));
+    });
+
+    document.getElementById('startBtn').addEventListener('click', startGame);
+    document.getElementById('restartBtn').addEventListener('click', startGame);
+  </script>
+</body>
+</html>
