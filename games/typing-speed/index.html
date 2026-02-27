@@ -241,7 +241,7 @@
         span.className = 'char';
         span.textContent = currentText[i];
         if (i < charIndex) {
-          span.classList.add(span.textContent === typingInput.value[i] ? 'correct' : 'correct');
+          span.classList.add(span.textContent === typingInput.value[i] ? 'correct' : 'wrong');
         } else if (i === charIndex) {
           span.classList.add('current');
         } else {
