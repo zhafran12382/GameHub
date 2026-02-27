@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Checkers - GameHub</title>
+  <link rel="stylesheet" href="../../css/style.css">
+  <style>
+    .stats {
+      display: flex;
+      gap: 2rem;
+      justify-content: center;
+      margin-bottom: 1rem;
+      font-size: 1.1rem;
+      flex-wrap: wrap;
+    }
+    .stats .label { color: var(--text-secondary); }
+    .stats .value {
+      color: var(--neon-green);
+      font-weight: 700;
+      font-family: 'Orbitron', sans-serif;
+    }
+    .checker-board {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      width: min(480px, 90vw);
+      height: min(480px, 90vw);
+      border: 2px solid var(--neon-blue);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .checker-cell {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 0.15s;
+      position: relative;
+      aspect-ratio: 1;
+    }
+    .checker-cell.light { background: #2a2a5a; }
+    .checker-cell.dark { background: #1a1a3e; }
+    .checker-cell.selected { background: rgba(0, 212, 255, 0.35) !important; }
+    .checker-cell.valid-move::after {
+      content: '';
+      position: absolute;
+      width: 35%;
+      height: 35%;
+      background: rgba(0, 255, 136, 0.5);
+      border-radius: 50%;
+    }
+    .checker-cell.last-move { background: rgba(255, 221, 0, 0.12) !important; }
+
+    .piece {
+      width: 75%;
+      height: 75%;
+      border-radius: 50%;
+      position: relative;
+      transition: transform 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(0.9rem, 3vw, 1.3rem);
+      font-weight: 900;
+    }
+    .piece.red {
+      background: radial-gradient(circle at 35% 35%, #ff6666, #cc0000);
+      box-shadow: 0 3px 8px rgba(204,0,0,0.5), inset 0 -2px 4px rgba(0,0,0,0.3);
+    }
+    .piece.black {
+      background: radial-gradient(circle at 35% 35%, #666, #222);
+      box-shadow: 0 3px 8px rgba(0,0,0,0.5), inset 0 -2px 4px rgba(0,0,0,0.4);
+    }
+    .piece.king::after {
+      content: '♛';
+      position: absolute;
+      color: var(--neon-yellow);
+      font-size: clamp(0.7rem, 2.5vw, 1.1rem);
+      text-shadow: 0 0 4px rgba(255,221,0,0.8);
+    }
+    .piece.selectable { cursor: pointer; }
+    .piece.selectable:hover { transform: scale(1.1); }
+
+    .turn-indicator {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1rem;
+      padding: 0.4rem 1rem;
+      border-radius: 20px;
+      margin-bottom: 0.5rem;
+    }
+    .turn-red { background: rgba(204,0,0,0.2); color: #ff4444; border: 1px solid rgba(204,0,0,0.4); }
+    .turn-black-side { background: rgba(100,100,100,0.2); color: #aaa; border: 1px solid rgba(100,100,100,0.4); }
+
+    .overlay { display: none; }
+    .overlay.active { display: flex; }
+    .final-score {
+      font-size: 2rem;
+      color: var(--neon-green);
+      font-family: 'Orbitron', sans-serif;
+      margin: 0.5rem 0 1rem;
+    }
+    .instructions {
+      color: var(--text-secondary);
+      text-align: center;
+      margin-top: 1rem;
+      font-size: 0.85rem;
+    }
+    .must-jump-note {
+      color: var(--neon-yellow);
+      font-size: 0.85rem;
+      text-align: center;
+      min-height: 1.2rem;
+      margin-bottom: 0.3rem;
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <a href="../../index.html" class="logo">Game<span>Hub</span></a>
+    <a href="../../index.html" class="nav-back">← Back</a>
+  </nav>
+
+  <div class="game-container">
+    <div class="game-header">
+      <h1>🔴 Checkers</h1>
+      <div class="turn-indicator turn-red" id="turnIndicator">Red's Turn (You)</div>
+      <div class="stats">
+        <div><span class="label">Red: </span><span class="value" id="redCount">12</span></div>
+        <div><span class="label">Black: </span><span class="value" id="blackCount">12</span></div>
+        <div><span class="label">Moves: </span><span class="value" id="moveCount">0</span></div>
+      </div>
+    </div>
+    <div class="must-jump-note" id="jumpNote"></div>
+    <div class="game-area">
+      <div class="checker-board" id="board"></div>
+    </div>
+    <div class="game-controls">
+      <button class="btn btn-primary" id="newGameBtn">New Game</button>
+    </div>
+    <p class="instructions">Click a piece to select, then click a highlighted square to move. Jumps are mandatory.</p>
+  </div>
+
+  <div class="overlay" id="gameOverOverlay">
+    <div class="modal">
+      <h2 id="gameOverTitle">Game Over</h2>
+      <div class="final-score" id="gameOverResult"></div>
+      <p id="gameOverDesc"></p>
+      <button class="btn btn-primary" id="playAgainBtn">Play Again</button>
+    </div>
+  </div>
+
+  <script>
+    /* Piece: {color:'red'|'black', king:bool} */
+    let boardState, turn, selectedCell, validMoves, moveCount, gameActive;
+    let lastMove, chainJumper;
+
+    function init() {
+      boardState = Array.from({length:8}, () => Array(8).fill(null));
+      // Place pieces
+      for (let r=0;r<3;r++) for (let c=0;c<8;c++) {
+        if ((r+c)%2===1) boardState[r][c] = {color:'black', king:false};
+      }
+      for (let r=5;r<8;r++) for (let c=0;c<8;c++) {
+        if ((r+c)%2===1) boardState[r][c] = {color:'red', king:false};
+      }
+      turn = 'red'; selectedCell = null; validMoves = [];
+      moveCount = 0; gameActive = true; lastMove = null; chainJumper = null;
+      document.getElementById('gameOverOverlay').classList.remove('active');
+      updateUI();
+      renderBoard();
+    }
+
+    function countPieces() {
+      let red=0, black=0;
+      for (let r=0;r<8;r++) for (let c=0;c<8;c++) {
+        if (boardState[r][c]) {
+          if (boardState[r][c].color==='red') red++;
+          else black++;
+        }
+      }
+      return {red, black};
+    }
+
+    function updateUI() {
+      const counts = countPieces();
+      document.getElementById('redCount').textContent = counts.red;
+      document.getElementById('blackCount').textContent = counts.black;
+      document.getElementById('moveCount').textContent = moveCount;
+      const ti = document.getElementById('turnIndicator');
+      if (turn==='red') { ti.textContent="Red's Turn (You)"; ti.className='turn-indicator turn-red'; }
+      else { ti.textContent="Black's Turn (AI)"; ti.className='turn-indicator turn-black-side'; }
+
+      const jumps = getAllJumps(turn);
+      document.getElementById('jumpNote').textContent = jumps.length > 0 ? '⚠ Jump available — you must jump!' : '';
+    }
+
+    function inBounds(r,c) { return r>=0&&r<8&&c>=0&&c<8; }
+
+    function getSimpleMoves(b, r, c) {
+      const p = b[r][c];
+      if (!p) return [];
+      const moves = [];
+      const dirs = p.king ? [-1,1] : (p.color==='red' ? [-1] : [1]);
+      for (const dr of dirs) {
+        for (const dc of [-1,1]) {
+          const nr=r+dr, nc=c+dc;
+          if (inBounds(nr,nc) && !b[nr][nc]) moves.push({to:[nr,nc], jump:false});
+        }
+      }
+      return moves;
+    }
+
+    function getJumpMoves(b, r, c) {
+      const p = b[r][c];
+      if (!p) return [];
+      const jumps = [];
+      const dirs = p.king ? [-1,1] : (p.color==='red' ? [-1] : [1]);
+      for (const dr of dirs) {
+        for (const dc of [-1,1]) {
+          const mr=r+dr, mc=c+dc;
+          const lr=r+2*dr, lc=c+2*dc;
+          if (inBounds(lr,lc) && b[mr][mc] && b[mr][mc].color!==p.color && !b[lr][lc]) {
+            jumps.push({to:[lr,lc], jumped:[mr,mc], jump:true});
+          }
+        }
+      }
+      return jumps;
+    }
+
+    function getAllJumps(color) {
+      const jumps = [];
+      for (let r=0;r<8;r++) for (let c=0;c<8;c++) {
+        if (boardState[r][c] && boardState[r][c].color===color) {
+          const j = getJumpMoves(boardState, r, c);
+          j.forEach(m => jumps.push({from:[r,c], ...m}));
+        }
+      }
+      return jumps;
+    }
+
+    function getAllMoves(color) {
+      const jumps = getAllJumps(color);
+      if (jumps.length > 0) return jumps; // mandatory jumps
+      const moves = [];
+      for (let r=0;r<8;r++) for (let c=0;c<8;c++) {
+        if (boardState[r][c] && boardState[r][c].color===color) {
+          const m = getSimpleMoves(boardState, r, c);
+          m.forEach(mv => moves.push({from:[r,c], ...mv}));
+        }
+      }
+      return moves;
+    }
+
+    function getMovesForPiece(r, c) {
+      const jumps = getAllJumps(turn);
+      if (jumps.length > 0) {
+        // Must jump — only return jumps for this piece
+        return jumps.filter(j => j.from[0]===r && j.from[1]===c);
+      }
+      return getSimpleMoves(boardState, r, c).map(m => ({from:[r,c], ...m}));
+    }
+
+    function makeMove(from, to, jumped) {
+      const [fr,fc] = from, [tr,tc] = to;
+      boardState[tr][tc] = {...boardState[fr][fc]};
+      boardState[fr][fc] = null;
+      if (jumped) boardState[jumped[0]][jumped[1]] = null;
+      // King promotion
+      if (boardState[tr][tc].color==='red' && tr===0) boardState[tr][tc].king = true;
+      if (boardState[tr][tc].color==='black' && tr===7) boardState[tr][tc].king = true;
+      lastMove = {from, to};
+    }
+
+    function onCellClick(r, c) {
+      if (!gameActive || turn!=='red') return;
+
+      // If we're in a chain jump, only allow moves from the chain piece
+      if (chainJumper) {
+        const mv = validMoves.find(m => m.to[0]===r && m.to[1]===c);
+        if (mv) {
+          makeMove(chainJumper, mv.to, mv.jumped);
+          // Check for further jumps
+          const further = getJumpMoves(boardState, r, c);
+          if (further.length > 0 && mv.jump) {
+            chainJumper = [r,c];
+            selectedCell = [r,c];
+            validMoves = further.map(m => ({from:[r,c], ...m}));
+            renderBoard();
+            return;
+          }
+          finishTurn();
+        }
+        return;
+      }
+
+      // If a move is selected
+      if (selectedCell) {
+        const mv = validMoves.find(m => m.to[0]===r && m.to[1]===c);
+        if (mv) {
+          makeMove(selectedCell, mv.to, mv.jumped);
+          // Chain jumps
+          if (mv.jump) {
+            const further = getJumpMoves(boardState, r, c);
+            if (further.length > 0) {
+              chainJumper = [r,c];
+              selectedCell = [r,c];
+              validMoves = further.map(m => ({from:[r,c], ...m}));
+              moveCount++;
+              updateUI();
+              renderBoard();
+              return;
+            }
+          }
+          finishTurn();
+          return;
+        }
+      }
+
+      // Select piece
+      if (boardState[r][c] && boardState[r][c].color==='red') {
+        const moves = getMovesForPiece(r, c);
+        if (moves.length > 0) {
+          selectedCell = [r,c];
+          validMoves = moves;
+          renderBoard();
+        }
+      }
+    }
+
+    function finishTurn() {
+      moveCount++;
+      chainJumper = null;
+      selectedCell = null;
+      validMoves = [];
+      turn = turn==='red' ? 'black' : 'red';
+      updateUI();
+      renderBoard();
+      checkGameEnd();
+      if (gameActive && turn==='black') setTimeout(aiMove, 400);
+    }
+
+    function checkGameEnd() {
+      const moves = getAllMoves(turn);
+      const counts = countPieces();
+      if (counts.red === 0) {
+        endGame('Black Wins', 'AI Wins!', 'All your pieces were captured.');
+      } else if (counts.black === 0) {
+        endGame('Red Wins', 'You Win!', 'You captured all opponent pieces!');
+      } else if (moves.length === 0) {
+        if (turn==='red') endGame('Black Wins', 'AI Wins!', 'No moves available for Red.');
+        else endGame('Red Wins', 'You Win!', 'AI has no moves available.');
+      }
+    }
+
+    function endGame(title, result, desc) {
+      gameActive = false;
+      document.getElementById('gameOverTitle').textContent = title;
+      document.getElementById('gameOverResult').textContent = result;
+      document.getElementById('gameOverDesc').textContent = desc;
+      document.getElementById('gameOverOverlay').classList.add('active');
+    }
+
+    /* ---- AI ---- */
+    function aiMove() {
+      if (!gameActive || turn!=='black') return;
+      let moves = getAllMoves('black');
+      if (moves.length === 0) return;
+
+      // Pick best move: prefer jumps, then kings, then forward
+      moves.sort((a, b) => {
+        let sa=0, sb=0;
+        if (a.jump) sa += 10;
+        if (b.jump) sb += 10;
+        // Prefer king moves less (preserve kings), prefer advancing
+        sa += a.to[0]; // further down = better for black
+        sb += b.to[0];
+        // Prefer center
+        sa += (3.5 - Math.abs(a.to[1] - 3.5));
+        sb += (3.5 - Math.abs(b.to[1] - 3.5));
+        sa += Math.random();
+        sb += Math.random();
+        return sb - sa;
+      });
+
+      const mv = moves[0];
+      makeMove(mv.from, mv.to, mv.jumped);
+
+      // Chain jumps for AI
+      if (mv.jump) {
+        let pos = mv.to;
+        let further = getJumpMoves(boardState, pos[0], pos[1]);
+        while (further.length > 0) {
+          // Pick best further jump
+          further.sort((a,b) => b.to[0] - a.to[0] + Math.random());
+          const next = further[0];
+          makeMove(pos, next.to, next.jumped);
+          pos = next.to;
+          further = getJumpMoves(boardState, pos[0], pos[1]);
+        }
+      }
+
+      finishTurn();
+    }
+
+    /* ---- Rendering ---- */
+    function renderBoard() {
+      const el = document.getElementById('board');
+      el.innerHTML = '';
+      for (let r=0;r<8;r++) {
+        for (let c=0;c<8;c++) {
+          const cell = document.createElement('div');
+          cell.className = 'checker-cell ' + ((r+c)%2===0 ? 'light' : 'dark');
+          if (selectedCell && selectedCell[0]===r && selectedCell[1]===c) cell.classList.add('selected');
+          if (lastMove && ((lastMove.from[0]===r&&lastMove.from[1]===c)||(lastMove.to[0]===r&&lastMove.to[1]===c))) {
+            cell.classList.add('last-move');
+          }
+          if (validMoves.some(m=>m.to[0]===r&&m.to[1]===c)) cell.classList.add('valid-move');
+
+          if (boardState[r][c]) {
+            const piece = document.createElement('div');
+            piece.className = 'piece ' + boardState[r][c].color;
+            if (boardState[r][c].king) piece.classList.add('king');
+            if (turn==='red' && boardState[r][c].color==='red' && gameActive) piece.classList.add('selectable');
+            cell.appendChild(piece);
+          }
+
+          cell.addEventListener('click', () => onCellClick(r, c));
+          el.appendChild(cell);
+        }
+      }
+    }
+
+    document.getElementById('newGameBtn').addEventListener('click', init);
+    document.getElementById('playAgainBtn').addEventListener('click', init);
+
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tic Tac Toe - GameHub</title>
+  <link rel="stylesheet" href="../../css/style.css">
+  <style>
+    .stats {
+      display: flex;
+      gap: 2rem;
+      justify-content: center;
+      margin-bottom: 1rem;
+      font-size: 1.1rem;
+      flex-wrap: wrap;
+    }
+    .stats .label {
+      color: var(--text-secondary);
+    }
+    .stats .value {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+    }
+    .stats .x-val { color: var(--neon-blue); }
+    .stats .o-val { color: var(--neon-pink); }
+    .stats .d-val { color: var(--neon-yellow); }
+    .status {
+      text-align: center;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.2rem;
+      margin-bottom: 1rem;
+      min-height: 2rem;
+      color: var(--neon-green);
+    }
+    .board {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      width: 330px;
+      height: 330px;
+      margin: 0 auto;
+    }
+    .cell {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 3rem;
+      font-weight: 900;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+    .cell:hover:not(.taken) {
+      border-color: var(--neon-blue);
+      box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);
+    }
+    .cell.taken { cursor: default; }
+    .cell.x { color: var(--neon-blue); text-shadow: 0 0 12px rgba(0, 212, 255, 0.5); }
+    .cell.o { color: var(--neon-pink); text-shadow: 0 0 12px rgba(255, 0, 170, 0.5); }
+    .cell.win-cell {
+      animation: winPulse 0.6s ease infinite alternate;
+    }
+    @keyframes winPulse {
+      from { box-shadow: 0 0 8px rgba(0, 255, 136, 0.3); }
+      to { box-shadow: 0 0 24px rgba(0, 255, 136, 0.7); border-color: var(--neon-green); }
+    }
+    .difficulty {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+      margin-top: 1rem;
+    }
+    .difficulty button {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      padding: 0.4rem 1rem;
+      border-radius: 20px;
+      cursor: pointer;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 0.9rem;
+      transition: all 0.3s ease;
+    }
+    .difficulty button:hover,
+    .difficulty button.active {
+      background: var(--neon-purple);
+      color: white;
+      border-color: var(--neon-purple);
+    }
+    .instructions {
+      color: var(--text-secondary);
+      text-align: center;
+      margin-top: 1rem;
+      font-size: 0.9rem;
+    }
+    @media (max-width: 400px) {
+      .board { width: 270px; height: 270px; }
+      .cell { font-size: 2.2rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <a href="../../index.html" class="logo">Game<span>Hub</span></a>
+    <a href="../../index.html" class="nav-back">← Back to Games</a>
+  </nav>
+
+  <div class="game-container">
+    <div class="game-header">
+      <h1>❌ Tic Tac Toe</h1>
+      <div class="stats">
+        <div><span class="label">You (X): </span><span class="value x-val" id="xWins">0</span></div>
+        <div><span class="label">CPU (O): </span><span class="value o-val" id="oWins">0</span></div>
+        <div><span class="label">Draws: </span><span class="value d-val" id="draws">0</span></div>
+      </div>
+    </div>
+
+    <div class="status" id="status">Press Start to play!</div>
+
+    <div class="game-area">
+      <div class="board" id="board"></div>
+    </div>
+
+    <div class="difficulty">
+      <button class="active" data-diff="easy">Easy</button>
+      <button data-diff="medium">Medium</button>
+      <button data-diff="hard">Hard</button>
+    </div>
+
+    <div class="game-controls">
+      <button class="btn btn-primary" id="startBtn">Start Game</button>
+      <button class="btn" id="resetScoreBtn">Reset Scores</button>
+    </div>
+    <p class="instructions">Click a cell to place your mark. Beat the computer!</p>
+  </div>
+
+  <script>
+    const boardEl = document.getElementById('board');
+    const statusEl = document.getElementById('status');
+    const WINS = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+
+    let cells, gameActive, difficulty, xWins, oWins, draws;
+
+    xWins = parseInt(localStorage.getItem('ttt_x')) || 0;
+    oWins = parseInt(localStorage.getItem('ttt_o')) || 0;
+    draws = parseInt(localStorage.getItem('ttt_d')) || 0;
+    difficulty = 'easy';
+    gameActive = false;
+    updateScoreUI();
+
+    function buildBoard() {
+      boardEl.innerHTML = '';
+      cells = Array(9).fill('');
+      for (let i = 0; i < 9; i++) {
+        const el = document.createElement('div');
+        el.className = 'cell';
+        el.dataset.index = i;
+        el.addEventListener('click', () => handleClick(i));
+        boardEl.appendChild(el);
+      }
+    }
+
+    function init() {
+      buildBoard();
+      gameActive = true;
+      statusEl.textContent = 'Your turn (X)';
+      statusEl.style.color = 'var(--neon-blue)';
+    }
+
+    function handleClick(i) {
+      if (!gameActive || cells[i]) return;
+      placeMove(i, 'X');
+      if (checkEnd()) return;
+      gameActive = false;
+      statusEl.textContent = 'CPU thinking...';
+      statusEl.style.color = 'var(--neon-pink)';
+      setTimeout(() => {
+        const move = cpuMove();
+        placeMove(move, 'O');
+        if (!checkEnd()) {
+          gameActive = true;
+          statusEl.textContent = 'Your turn (X)';
+          statusEl.style.color = 'var(--neon-blue)';
+        }
+      }, 300);
+    }
+
+    function placeMove(i, mark) {
+      cells[i] = mark;
+      const el = boardEl.children[i];
+      el.textContent = mark;
+      el.classList.add(mark.toLowerCase(), 'taken');
+    }
+
+    function checkEnd() {
+      const winner = getWinner();
+      if (winner) {
+        const combo = WINS.find(w => cells[w[0]] === winner && cells[w[1]] === winner && cells[w[2]] === winner);
+        combo.forEach(i => boardEl.children[i].classList.add('win-cell'));
+        gameActive = false;
+        if (winner === 'X') {
+          statusEl.textContent = '🎉 You win!';
+          statusEl.style.color = 'var(--neon-green)';
+          xWins++;
+        } else {
+          statusEl.textContent = '💻 CPU wins!';
+          statusEl.style.color = 'var(--neon-pink)';
+          oWins++;
+        }
+        saveScores();
+        updateScoreUI();
+        return true;
+      }
+      if (cells.every(c => c)) {
+        gameActive = false;
+        statusEl.textContent = "🤝 It's a draw!";
+        statusEl.style.color = 'var(--neon-yellow)';
+        draws++;
+        saveScores();
+        updateScoreUI();
+        return true;
+      }
+      return false;
+    }
+
+    function getWinner() {
+      for (const [a, b, c] of WINS) {
+        if (cells[a] && cells[a] === cells[b] && cells[a] === cells[c]) return cells[a];
+      }
+      return null;
+    }
+
+    function cpuMove() {
+      const empty = cells.map((c, i) => c ? -1 : i).filter(i => i !== -1);
+      if (difficulty === 'hard') return bestMove();
+      if (difficulty === 'medium') {
+        // 60% smart, 40% random
+        return Math.random() < 0.6 ? bestMove() : empty[Math.floor(Math.random() * empty.length)];
+      }
+      // Easy: random
+      return empty[Math.floor(Math.random() * empty.length)];
+    }
+
+    function bestMove() {
+      let best = -Infinity, move = -1;
+      for (let i = 0; i < 9; i++) {
+        if (cells[i]) continue;
+        cells[i] = 'O';
+        const s = minimax(cells, 0, false);
+        cells[i] = '';
+        if (s > best) { best = s; move = i; }
+      }
+      return move;
+    }
+
+    function minimax(b, depth, isMax) {
+      const w = getWinner();
+      if (w === 'O') return 10 - depth;
+      if (w === 'X') return depth - 10;
+      if (b.every(c => c)) return 0;
+
+      if (isMax) {
+        let best = -Infinity;
+        for (let i = 0; i < 9; i++) {
+          if (b[i]) continue;
+          b[i] = 'O';
+          best = Math.max(best, minimax(b, depth + 1, false));
+          b[i] = '';
+        }
+        return best;
+      } else {
+        let best = Infinity;
+        for (let i = 0; i < 9; i++) {
+          if (b[i]) continue;
+          b[i] = 'X';
+          best = Math.min(best, minimax(b, depth + 1, true));
+          b[i] = '';
+        }
+        return best;
+      }
+    }
+
+    function updateScoreUI() {
+      document.getElementById('xWins').textContent = xWins;
+      document.getElementById('oWins').textContent = oWins;
+      document.getElementById('draws').textContent = draws;
+    }
+
+    function saveScores() {
+      localStorage.setItem('ttt_x', xWins);
+      localStorage.setItem('ttt_o', oWins);
+      localStorage.setItem('ttt_d', draws);
+    }
+
+    // Difficulty buttons
+    document.querySelectorAll('.difficulty button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.difficulty button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        difficulty = btn.dataset.diff;
+      });
+    });
+
+    document.getElementById('startBtn').addEventListener('click', init);
+    document.getElementById('resetScoreBtn').addEventListener('click', () => {
+      xWins = oWins = draws = 0;
+      saveScores();
+      updateScoreUI();
+    });
+
+    buildBoard();
+  </script>
+</body>
+</html>

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GameHub - Your Browser Game Arcade</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <a href="/" class="logo">Game<span>Hub</span></a>
+    <div class="nav-controls">
+      <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Search games...">
+      </div>
+      <div class="filter-buttons">
+        <button class="filter-btn active" data-category="all">All</button>
+        <button class="filter-btn" data-category="classic">Classic</button>
+        <button class="filter-btn" data-category="puzzle">Puzzle</button>
+        <button class="filter-btn" data-category="arcade">Arcade</button>
+        <button class="filter-btn" data-category="board">Board</button>
+        <button class="filter-btn" data-category="word">Word</button>
+      </div>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <h1>🎮 GameHub Arcade</h1>
+    <p>Play 21 awesome browser games for free — no downloads, no installs, just fun!</p>
+  </section>
+
+  <section class="games-section">
+    <h2>🕹️ All Games</h2>
+    <div class="game-grid" id="gameGrid"></div>
+  </section>
+
+  <footer class="footer">
+    <p>&copy; 2026 GameHub. Built with ❤️ using vanilla HTML, CSS &amp; JavaScript.</p>
+  </footer>
+
+  <script>
+    const games = [
+      { id: 'snake', title: 'Snake', emoji: '🐍', desc: 'Guide the snake to eat food and grow longer without hitting yourself.', categories: ['classic', 'arcade'] },
+      { id: 'tetris', title: 'Tetris', emoji: '🧱', desc: 'Stack falling blocks to clear lines in this timeless classic.', categories: ['classic', 'puzzle'] },
+      { id: 'tic-tac-toe', title: 'Tic Tac Toe', emoji: '❌', desc: 'Classic X and O game. Play against a friend or the computer.', categories: ['classic', 'board'] },
+      { id: 'minesweeper', title: 'Minesweeper', emoji: '💣', desc: 'Uncover all safe cells without detonating any mines.', categories: ['classic', 'puzzle'] },
+      { id: '2048', title: '2048', emoji: '🔢', desc: 'Slide tiles and combine numbers to reach the 2048 tile.', categories: ['puzzle'] },
+      { id: 'flappy-bird', title: 'Flappy Bird', emoji: '🐦', desc: 'Tap to fly through pipes in this addictive arcade game.', categories: ['arcade'] },
+      { id: 'pong', title: 'Pong', emoji: '🏓', desc: 'The original arcade classic. Bounce the ball past your opponent.', categories: ['classic', 'arcade'] },
+      { id: 'breakout', title: 'Breakout', emoji: '🧱', desc: 'Break all the bricks by bouncing the ball off your paddle.', categories: ['classic', 'arcade'] },
+      { id: 'memory-match', title: 'Memory Match', emoji: '🃏', desc: 'Flip cards and find matching pairs. Test your memory!', categories: ['puzzle'] },
+      { id: 'whack-a-mole', title: 'Whack-a-Mole', emoji: '🔨', desc: 'Whack the moles as they pop up before time runs out!', categories: ['arcade'] },
+      { id: 'rock-paper-scissors', title: 'Rock Paper Scissors', emoji: '✊', desc: 'The classic hand game. Can you beat the computer?', categories: ['classic'] },
+      { id: 'simon-says', title: 'Simon Says', emoji: '🎵', desc: 'Repeat the color sequence. How far can your memory go?', categories: ['puzzle'] },
+      { id: 'sudoku', title: 'Sudoku', emoji: '🔢', desc: 'Fill the 9x9 grid so each row, column and box has 1-9.', categories: ['puzzle'] },
+      { id: 'chess', title: 'Chess', emoji: '♟️', desc: 'The king of strategy games. Play against a simple AI.', categories: ['board'] },
+      { id: 'checkers', title: 'Checkers', emoji: '🔴', desc: 'Jump and capture all of your opponent\'s pieces to win.', categories: ['board'] },
+      { id: 'hangman', title: 'Hangman', emoji: '📝', desc: 'Guess the hidden word one letter at a time before it\'s too late.', categories: ['word'] },
+      { id: 'typing-speed', title: 'Typing Speed Test', emoji: '⌨️', desc: 'Test your typing speed and accuracy with random passages.', categories: ['word'] },
+      { id: 'quiz', title: 'Quiz Game', emoji: '❓', desc: 'Test your knowledge across various trivia categories.', categories: ['word', 'puzzle'] },
+      { id: 'dino-runner', title: 'Dino Runner', emoji: '🦕', desc: 'Jump over obstacles in this endless runner inspired by Chrome.', categories: ['arcade'] },
+      { id: 'space-invaders', title: 'Space Invaders', emoji: '👾', desc: 'Defend Earth from waves of alien invaders!', categories: ['classic', 'arcade'] },
+      { id: 'connect-four', title: 'Connect Four', emoji: '🔵', desc: 'Drop discs to connect four in a row before your opponent.', categories: ['board'] }
+    ];
+
+    const gameGrid = document.getElementById('gameGrid');
+    const searchInput = document.getElementById('searchInput');
+    const filterBtns = document.querySelectorAll('.filter-btn');
+
+    function renderGames(filter = 'all', search = '') {
+      gameGrid.innerHTML = '';
+      const filtered = games.filter(g => {
+        const matchCat = filter === 'all' || g.categories.includes(filter);
+        const matchSearch = g.title.toLowerCase().includes(search.toLowerCase()) || g.desc.toLowerCase().includes(search.toLowerCase());
+        return matchCat && matchSearch;
+      });
+
+      if (filtered.length === 0) {
+        gameGrid.innerHTML = '<p style="color:var(--text-secondary);grid-column:1/-1;text-align:center;padding:3rem;">No games found matching your search.</p>';
+        return;
+      }
+
+      filtered.forEach(g => {
+        const card = document.createElement('a');
+        card.href = `games/${g.id}/index.html`;
+        card.className = 'game-card';
+        card.innerHTML = `
+          <div class="thumb">${g.emoji}</div>
+          <div class="info">
+            <h3>${g.title}</h3>
+            <p>${g.desc}</p>
+            <div class="tags">${g.categories.map(c => `<span class="tag">${c}</span>`).join('')}</div>
+          </div>
+        `;
+        gameGrid.appendChild(card);
+      });
+    }
+
+    searchInput.addEventListener('input', () => {
+      const activeFilter = document.querySelector('.filter-btn.active').dataset.category;
+      renderGames(activeFilter, searchInput.value);
+    });
+
+    filterBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        filterBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        renderGames(btn.dataset.category, searchInput.value);
+      });
+    });
+
+    renderGames();
+  </script>
+</body>
+</html>

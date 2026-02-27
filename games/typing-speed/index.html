@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Typing Speed Test - GameHub</title>
+  <link rel="stylesheet" href="../../css/style.css">
+  <style>
+    .game-area {
+      width: 100%;
+      max-width: 800px;
+      padding: 2rem;
+    }
+    .stats {
+      display: flex;
+      gap: 2rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 1.5rem;
+      font-size: 1.1rem;
+    }
+    .stats .label { color: var(--text-secondary); }
+    .stats .value {
+      color: var(--neon-green);
+      font-weight: 700;
+      font-family: 'Orbitron', sans-serif;
+    }
+    .timer-options {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+    .timer-btn {
+      background: var(--bg-card);
+      border: 2px solid var(--border-color);
+      color: var(--text-secondary);
+      padding: 0.4rem 1.2rem;
+      border-radius: 20px;
+      cursor: pointer;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      transition: var(--transition);
+    }
+    .timer-btn:hover, .timer-btn.active {
+      border-color: var(--neon-blue);
+      color: var(--neon-blue);
+    }
+    .timer-btn.active {
+      background: rgba(0,212,255,0.1);
+    }
+    .text-display {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 1.5rem;
+      font-size: 1.25rem;
+      line-height: 2;
+      min-height: 120px;
+      margin-bottom: 1rem;
+      user-select: none;
+      position: relative;
+      font-family: 'Rajdhani', sans-serif;
+    }
+    .text-display .char {
+      position: relative;
+      letter-spacing: 0.5px;
+    }
+    .text-display .char.correct {
+      color: var(--neon-green);
+    }
+    .text-display .char.wrong {
+      color: var(--neon-pink);
+      background: rgba(255,0,170,0.15);
+      border-radius: 2px;
+    }
+    .text-display .char.current {
+      border-bottom: 2px solid var(--neon-yellow);
+    }
+    .text-display .char.pending {
+      color: var(--text-secondary);
+    }
+    .typing-input {
+      width: 100%;
+      background: var(--bg-card);
+      border: 2px solid var(--border-color);
+      border-radius: 10px;
+      padding: 1rem 1.5rem;
+      color: var(--text-primary);
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 1.2rem;
+      outline: none;
+      transition: var(--transition);
+    }
+    .typing-input:focus {
+      border-color: var(--neon-blue);
+      box-shadow: var(--shadow-neon);
+    }
+    .typing-input:disabled {
+      opacity: 0.5;
+    }
+    .results-panel {
+      background: var(--bg-card);
+      border: 2px solid var(--neon-blue);
+      border-radius: 12px;
+      padding: 2rem;
+      text-align: center;
+      margin-top: 1.5rem;
+    }
+    .results-panel h2 {
+      font-family: 'Orbitron', sans-serif;
+      color: var(--neon-blue);
+      margin-bottom: 1.5rem;
+    }
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .result-item {
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      padding: 1rem;
+    }
+    .result-item .result-value {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 2rem;
+      font-weight: 900;
+      color: var(--neon-green);
+    }
+    .result-item .result-label {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      margin-top: 0.3rem;
+    }
+    .click-to-start {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      margin-top: 0.5rem;
+    }
+    @media (max-width: 480px) {
+      .text-display { font-size: 1rem; padding: 1rem; }
+      .stats { gap: 1rem; font-size: 0.95rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <a href="../../index.html" class="logo">Game<span>Hub</span></a>
+    <a href="../../index.html" class="nav-back">← Back to Games</a>
+  </nav>
+
+  <div class="game-container">
+    <div class="game-header">
+      <h1>⌨️ Typing Speed Test</h1>
+      <div class="stats">
+        <div><span class="label">WPM: </span><span class="value" id="wpm">0</span></div>
+        <div><span class="label">Accuracy: </span><span class="value" id="accuracy">100%</span></div>
+        <div><span class="label">Time: </span><span class="value" id="timer">--</span></div>
+      </div>
+    </div>
+
+    <div class="game-area">
+      <div class="timer-options">
+        <button class="timer-btn active" data-time="30">30s</button>
+        <button class="timer-btn" data-time="60">60s</button>
+        <button class="timer-btn" data-time="120">120s</button>
+      </div>
+      <div class="text-display" id="textDisplay"></div>
+      <input type="text" class="typing-input" id="typingInput" placeholder="Start typing here..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+      <p class="click-to-start" id="startHint">Click the input box and start typing to begin the test</p>
+      <div class="results-panel hidden" id="resultsPanel">
+        <h2>🏁 Results</h2>
+        <div class="result-grid">
+          <div class="result-item">
+            <div class="result-value" id="finalWpm">0</div>
+            <div class="result-label">WPM</div>
+          </div>
+          <div class="result-item">
+            <div class="result-value" id="finalAccuracy">0%</div>
+            <div class="result-label">Accuracy</div>
+          </div>
+          <div class="result-item">
+            <div class="result-value" id="finalCorrect">0</div>
+            <div class="result-label">Correct</div>
+          </div>
+          <div class="result-item">
+            <div class="result-value" id="finalWrong">0</div>
+            <div class="result-label">Errors</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="game-controls">
+      <button class="btn btn-primary" id="restartBtn">Restart</button>
+    </div>
+  </div>
+
+  <script>
+    const PARAGRAPHS = [
+      "The quick brown fox jumps over the lazy dog near the river bank. Every morning the birds sing their favorite melodies while the sun rises slowly above the mountain peaks creating beautiful golden reflections on the calm water surface.",
+      "Programming is the art of telling a computer what to do through a set of instructions. Good programmers write code that humans can understand while machines execute it efficiently and without errors in production environments.",
+      "Space exploration has always fascinated humanity since the dawn of civilization. From gazing at stars to landing on the moon, each achievement pushes the boundaries of what we thought was possible in the vast universe around us.",
+      "Music connects people across cultures and languages in ways that words alone cannot achieve. A simple melody can evoke powerful emotions and bring back memories from years ago, reminding us of moments we thought we had forgotten.",
+      "The ocean covers more than seventy percent of our planet and remains largely unexplored. Deep beneath the waves lie mysterious creatures and landscapes that scientists are only beginning to discover and understand through modern technology.",
+      "Cooking is both a science and an art that brings families together around the dinner table. The combination of fresh ingredients and careful preparation can transform simple foods into extraordinary dishes that delight all of the senses.",
+      "Reading books opens doors to new worlds and perspectives that we might never experience otherwise. Through the pages of a novel we can travel through time and space meeting characters who change the way we think about life.",
+      "Climate change presents one of the greatest challenges facing our generation today. Rising temperatures and extreme weather patterns affect communities worldwide and require innovative solutions from scientists engineers and everyday citizens working together.",
+      "Artificial intelligence is transforming the way we live work and interact with technology every day. From virtual assistants to self driving cars these systems are becoming more sophisticated and capable of tasks once thought impossible for machines.",
+      "Photography captures moments in time that would otherwise be lost forever to memory. Whether using a professional camera or a simple phone the ability to freeze a beautiful sunset or a loved ones smile is truly a remarkable gift."
+    ];
+
+    let selectedTime = 30;
+    let timeLeft = 30;
+    let timerInterval = null;
+    let started = false;
+    let finished = false;
+    let currentText = '';
+    let charIndex = 0;
+    let correctChars = 0;
+    let wrongChars = 0;
+
+    const textDisplay = document.getElementById('textDisplay');
+    const typingInput = document.getElementById('typingInput');
+    const timerBtns = document.querySelectorAll('.timer-btn');
+    const resultsPanel = document.getElementById('resultsPanel');
+    const startHint = document.getElementById('startHint');
+
+    function pickText() {
+      const shuffled = [...PARAGRAPHS].sort(() => Math.random() - 0.5);
+      currentText = shuffled.slice(0, 2).join(' ');
+    }
+
+    function renderText() {
+      textDisplay.innerHTML = '';
+      for (let i = 0; i < currentText.length; i++) {
+        const span = document.createElement('span');
+        span.className = 'char';
+        span.textContent = currentText[i];
+        if (i < charIndex) {
+          span.classList.add(span.textContent === typingInput.value[i] ? 'correct' : 'wrong');
+        } else if (i === charIndex) {
+          span.classList.add('current');
+        } else {
+          span.classList.add('pending');
+        }
+        textDisplay.appendChild(span);
+      }
+    }
+
+    function initText() {
+      pickText();
+      charIndex = 0;
+      correctChars = 0;
+      wrongChars = 0;
+      const spans = [];
+      for (let i = 0; i < currentText.length; i++) {
+        const cls = i === 0 ? 'char current' : 'char pending';
+        spans.push(`<span class="${cls}">${currentText[i] === ' ' ? ' ' : escapeHtml(currentText[i])}</span>`);
+      }
+      textDisplay.innerHTML = spans.join('');
+    }
+
+    function escapeHtml(c) {
+      const map = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'};
+      return map[c] || c;
+    }
+
+    function startTimer() {
+      started = true;
+      startHint.classList.add('hidden');
+      timeLeft = selectedTime;
+      document.getElementById('timer').textContent = timeLeft + 's';
+      timerInterval = setInterval(() => {
+        timeLeft--;
+        document.getElementById('timer').textContent = timeLeft + 's';
+        updateStats();
+        if (timeLeft <= 0) {
+          endTest();
+        }
+      }, 1000);
+    }
+
+    function updateStats() {
+      const elapsed = selectedTime - timeLeft;
+      if (elapsed > 0) {
+        const wpm = Math.round((correctChars / 5) / (elapsed / 60));
+        document.getElementById('wpm').textContent = wpm;
+      }
+      const total = correctChars + wrongChars;
+      const acc = total > 0 ? Math.round((correctChars / total) * 100) : 100;
+      document.getElementById('accuracy').textContent = acc + '%';
+    }
+
+    function endTest() {
+      clearInterval(timerInterval);
+      finished = true;
+      typingInput.disabled = true;
+      const elapsed = selectedTime - timeLeft || selectedTime;
+      const wpm = Math.round((correctChars / 5) / (elapsed / 60));
+      const total = correctChars + wrongChars;
+      const acc = total > 0 ? Math.round((correctChars / total) * 100) : 100;
+
+      document.getElementById('finalWpm').textContent = wpm;
+      document.getElementById('finalAccuracy').textContent = acc + '%';
+      document.getElementById('finalCorrect').textContent = correctChars;
+      document.getElementById('finalWrong').textContent = wrongChars;
+      resultsPanel.classList.remove('hidden');
+    }
+
+    typingInput.addEventListener('input', () => {
+      if (finished) return;
+      if (!started) startTimer();
+
+      const inputVal = typingInput.value;
+      const chars = textDisplay.querySelectorAll('.char');
+
+      charIndex = inputVal.length;
+
+      correctChars = 0;
+      wrongChars = 0;
+
+      for (let i = 0; i < chars.length; i++) {
+        chars[i].className = 'char';
+        if (i < inputVal.length) {
+          if (inputVal[i] === currentText[i]) {
+            chars[i].classList.add('correct');
+            correctChars++;
+          } else {
+            chars[i].classList.add('wrong');
+            wrongChars++;
+          }
+        } else if (i === inputVal.length) {
+          chars[i].classList.add('current');
+        } else {
+          chars[i].classList.add('pending');
+        }
+      }
+
+      updateStats();
+
+      if (charIndex >= currentText.length) {
+        endTest();
+      }
+    });
+
+    timerBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (started) return;
+        timerBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        selectedTime = parseInt(btn.dataset.time);
+        timeLeft = selectedTime;
+        document.getElementById('timer').textContent = selectedTime + 's';
+      });
+    });
+
+    document.getElementById('restartBtn').addEventListener('click', () => {
+      clearInterval(timerInterval);
+      started = false;
+      finished = false;
+      charIndex = 0;
+      correctChars = 0;
+      wrongChars = 0;
+      typingInput.value = '';
+      typingInput.disabled = false;
+      document.getElementById('wpm').textContent = '0';
+      document.getElementById('accuracy').textContent = '100%';
+      document.getElementById('timer').textContent = selectedTime + 's';
+      resultsPanel.classList.add('hidden');
+      startHint.classList.remove('hidden');
+      initText();
+      typingInput.focus();
+    });
+
+    initText();
+    document.getElementById('timer').textContent = selectedTime + 's';
+  </script>
+</body>
+</html>

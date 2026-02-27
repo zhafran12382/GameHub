@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Whack-a-Mole - GameHub</title>
+  <link rel="stylesheet" href="../../css/style.css">
+  <style>
+    .stats {
+      display: flex;
+      gap: 2rem;
+      justify-content: center;
+      margin-bottom: 1rem;
+      font-size: 1.1rem;
+    }
+    .stats .label { color: var(--text-secondary); }
+    .stats .value {
+      color: var(--neon-green);
+      font-weight: 700;
+      font-family: 'Orbitron', sans-serif;
+    }
+    .stats .value.time { color: var(--neon-pink); }
+    .mole-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      max-width: 420px;
+      width: 100%;
+      padding: 1.5rem;
+    }
+    .hole {
+      position: relative;
+      width: 100%;
+      padding-bottom: 100%;
+      background: radial-gradient(ellipse at center bottom, #2a1a00 0%, var(--bg-secondary) 70%);
+      border-radius: 50%;
+      border: 2px solid var(--border-color);
+      overflow: hidden;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .hole::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 5%;
+      width: 90%;
+      height: 35%;
+      background: radial-gradient(ellipse at center, #3d2800 0%, #1a0f00 100%);
+      border-radius: 50%;
+    }
+    .mole {
+      position: absolute;
+      bottom: -60%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 70%;
+      height: 70%;
+      transition: bottom 0.15s ease-out;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.5rem;
+      pointer-events: none;
+    }
+    .hole.active .mole {
+      bottom: 15%;
+    }
+    .hole.whacked .mole {
+      bottom: -60%;
+      transition: bottom 0.1s ease-in;
+    }
+    .hole.whacked::before {
+      content: '💥';
+      position: absolute;
+      top: 20%;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 2rem;
+      z-index: 3;
+      animation: pop 0.3s ease-out forwards;
+    }
+    @keyframes pop {
+      0% { opacity: 1; transform: translateX(-50%) scale(0.5); }
+      100% { opacity: 0; transform: translateX(-50%) scale(1.5) translateY(-20px); }
+    }
+    .score-popup {
+      position: absolute;
+      top: 10%;
+      left: 50%;
+      transform: translateX(-50%);
+      color: var(--neon-green);
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+      font-size: 1.2rem;
+      z-index: 4;
+      animation: float-up 0.5s ease-out forwards;
+      pointer-events: none;
+    }
+    @keyframes float-up {
+      0% { opacity: 1; transform: translateX(-50%) translateY(0); }
+      100% { opacity: 0; transform: translateX(-50%) translateY(-30px); }
+    }
+    .timer-bar {
+      width: 100%;
+      max-width: 420px;
+      height: 8px;
+      background: var(--bg-card);
+      border-radius: 4px;
+      margin-bottom: 1rem;
+      overflow: hidden;
+    }
+    .timer-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--neon-pink), var(--neon-blue));
+      border-radius: 4px;
+      transition: width 0.1s linear;
+      width: 100%;
+    }
+    .instructions {
+      color: var(--text-secondary);
+      text-align: center;
+      margin-top: 1rem;
+      font-size: 0.9rem;
+    }
+    .overlay { display: none; }
+    .overlay.active { display: flex; }
+    .final-score {
+      font-size: 2.5rem;
+      color: var(--neon-green);
+      font-family: 'Orbitron', sans-serif;
+      margin: 0.5rem 0 1rem;
+    }
+    @media (max-width: 480px) {
+      .mole-grid { gap: 0.6rem; padding: 1rem; max-width: 320px; }
+      .mole { font-size: 1.8rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <a href="../../index.html" class="logo">Game<span>Hub</span></a>
+    <a href="../../index.html" class="nav-back">← Back to Games</a>
+  </nav>
+
+  <div class="game-container">
+    <div class="game-header">
+      <h1>🔨 Whack-a-Mole</h1>
+      <div class="stats">
+        <div><span class="label">Score: </span><span class="value" id="score">0</span></div>
+        <div><span class="label">High Score: </span><span class="value" id="highScore">0</span></div>
+        <div><span class="label">Time: </span><span class="value time" id="timer">30</span></div>
+      </div>
+    </div>
+
+    <div class="timer-bar"><div class="timer-bar-fill" id="timerBar"></div></div>
+
+    <div class="game-area mole-grid" id="grid"></div>
+
+    <div class="game-controls">
+      <button class="btn btn-primary" id="startBtn">Start Game</button>
+    </div>
+    <p class="instructions">Click or tap the moles as they pop up! You have 30 seconds.</p>
+  </div>
+
+  <div class="overlay" id="gameOverOverlay">
+    <div class="modal">
+      <h2>Time's Up!</h2>
+      <div class="final-score" id="finalScore">0</div>
+      <p id="resultMsg">Great job!</p>
+      <button class="btn btn-primary" id="restartBtn">Play Again</button>
+    </div>
+  </div>
+
+  <script>
+    const GAME_DURATION = 30;
+    const HOLE_COUNT = 9;
+    const grid = document.getElementById('grid');
+    let score, timeLeft, highScore, gameInterval, timerInterval, moleTimeout;
+    let running = false;
+    let lastHole = -1;
+    let minDelay = 800;
+    let maxDelay = 1500;
+
+    highScore = parseInt(localStorage.getItem('whack_highscore')) || 0;
+    document.getElementById('highScore').textContent = highScore;
+
+    // Build grid
+    for (let i = 0; i < HOLE_COUNT; i++) {
+      const hole = document.createElement('div');
+      hole.className = 'hole';
+      hole.dataset.index = i;
+      hole.innerHTML = '<div class="mole">🐹</div>';
+      hole.addEventListener('click', () => whack(i));
+      grid.appendChild(hole);
+    }
+
+    const holes = grid.querySelectorAll('.hole');
+
+    function init() {
+      score = 0;
+      timeLeft = GAME_DURATION;
+      minDelay = 800;
+      maxDelay = 1500;
+      running = true;
+      updateUI();
+      document.getElementById('gameOverOverlay').classList.remove('active');
+      document.getElementById('startBtn').textContent = 'Running...';
+      document.getElementById('startBtn').disabled = true;
+
+      holes.forEach(h => { h.classList.remove('active', 'whacked'); });
+
+      timerInterval = setInterval(() => {
+        timeLeft--;
+        updateUI();
+        // Increase difficulty over time
+        if (timeLeft === 20) { minDelay = 600; maxDelay = 1200; }
+        if (timeLeft === 10) { minDelay = 400; maxDelay = 900; }
+        if (timeLeft === 5) { minDelay = 300; maxDelay = 700; }
+        if (timeLeft <= 0) gameOver();
+      }, 1000);
+
+      showMole();
+    }
+
+    function showMole() {
+      if (!running) return;
+      holes.forEach(h => h.classList.remove('active'));
+
+      let idx;
+      do { idx = Math.floor(Math.random() * HOLE_COUNT); } while (idx === lastHole);
+      lastHole = idx;
+
+      holes[idx].classList.remove('whacked');
+      holes[idx].classList.add('active');
+
+      const delay = Math.random() * (maxDelay - minDelay) + minDelay;
+      moleTimeout = setTimeout(() => {
+        holes[idx].classList.remove('active');
+        showMole();
+      }, delay);
+    }
+
+    function whack(idx) {
+      if (!running) return;
+      const hole = holes[idx];
+      if (!hole.classList.contains('active')) return;
+
+      hole.classList.remove('active');
+      hole.classList.add('whacked');
+      score += 10;
+      updateUI();
+
+      // Score popup
+      const popup = document.createElement('div');
+      popup.className = 'score-popup';
+      popup.textContent = '+10';
+      hole.appendChild(popup);
+      setTimeout(() => popup.remove(), 500);
+
+      clearTimeout(moleTimeout);
+      setTimeout(showMole, 200);
+    }
+
+    function updateUI() {
+      document.getElementById('score').textContent = score;
+      document.getElementById('timer').textContent = timeLeft;
+      const pct = (timeLeft / GAME_DURATION) * 100;
+      document.getElementById('timerBar').style.width = pct + '%';
+    }
+
+    function gameOver() {
+      running = false;
+      clearInterval(timerInterval);
+      clearTimeout(moleTimeout);
+      holes.forEach(h => h.classList.remove('active'));
+
+      if (score > highScore) {
+        highScore = score;
+        localStorage.setItem('whack_highscore', highScore);
+        document.getElementById('highScore').textContent = highScore;
+      }
+
+      document.getElementById('finalScore').textContent = score;
+      const msg = score >= 200 ? '🏆 Amazing!' : score >= 100 ? '🎉 Great job!' : '👍 Nice try!';
+      document.getElementById('resultMsg').textContent = msg;
+      document.getElementById('gameOverOverlay').classList.add('active');
+      document.getElementById('startBtn').textContent = 'Start Game';
+      document.getElementById('startBtn').disabled = false;
+    }
+
+    document.getElementById('startBtn').addEventListener('click', init);
+    document.getElementById('restartBtn').addEventListener('click', init);
+  </script>
+</body>
+</html>
