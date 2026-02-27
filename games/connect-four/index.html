@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connect Four - GameHub</title>
+  <link rel="stylesheet" href="../../css/style.css">
+  <style>
+    .game-area { padding: 1.5rem; }
+    .board { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; max-width: 490px; margin: 0 auto; background: var(--bg-card); border-radius: 12px; padding: 10px; border: 2px solid var(--border-color); }
+    .cell { width: 60px; height: 60px; background: var(--bg-primary); border-radius: 50%; cursor: pointer; transition: all 0.2s ease; position: relative; border: 2px solid var(--border-color); }
+    .cell:hover { border-color: var(--neon-blue); box-shadow: 0 0 10px rgba(0,212,255,0.3); }
+    .cell.red { background: #ff3355; border-color: #ff3355; box-shadow: 0 0 12px rgba(255,51,85,0.5); }
+    .cell.yellow { background: #ffdd00; border-color: #ffdd00; box-shadow: 0 0 12px rgba(255,221,0,0.5); }
+    .cell.win { animation: winPulse 0.6s ease infinite alternate; }
+    @keyframes winPulse { from { transform: scale(1); } to { transform: scale(1.12); box-shadow: 0 0 20px rgba(255,255,255,0.5); } }
+    .col-indicator { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; max-width: 490px; margin: 0 auto 8px; }
+    .col-arrow { text-align: center; font-size: 1.2rem; color: transparent; transition: color 0.2s; cursor: pointer; height: 24px; line-height: 24px; }
+    .col-arrow:hover, .col-arrow.active { color: var(--neon-blue); }
+    .status { font-family: 'Orbitron', sans-serif; font-size: 1.1rem; text-align: center; margin-top: 1rem; min-height: 1.5rem; color: var(--neon-yellow); }
+    .game-header .score-board { font-size: 1.1rem; gap: 1.5rem; flex-wrap: wrap; }
+    .score-red { color: #ff3355 !important; }
+    .score-yellow { color: #ffdd00 !important; }
+    .instructions { color: var(--text-secondary); font-size: 0.95rem; margin-top: 1rem; text-align: center; max-width: 500px; }
+    @media (max-width: 520px) {
+      .cell { width: 42px; height: 42px; }
+      .board, .col-indicator { max-width: 340px; gap: 4px; }
+      .board { padding: 6px; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <a href="../../index.html" class="logo">Game<span>Hub</span></a>
+    <a href="../../index.html" class="nav-back">← Back to Games</a>
+  </nav>
+
+  <div class="game-container">
+    <div class="game-header">
+      <h1>🔵 Connect Four</h1>
+      <div class="score-board">
+        <div>You (<span class="score-red">Red</span>): <span id="playerScore">0</span></div>
+        <div>AI (<span class="score-yellow">Yellow</span>): <span id="aiScore">0</span></div>
+        <div>Draws: <span id="draws">0</span></div>
+      </div>
+    </div>
+    <div class="game-area">
+      <div class="col-indicator" id="colIndicator"></div>
+      <div class="board" id="board"></div>
+      <div class="status" id="status">Your turn — drop a red disc!</div>
+    </div>
+    <div class="game-controls">
+      <button class="btn btn-primary" id="newGameBtn">New Game</button>
+      <button class="btn" id="resetBtn">Reset Scores</button>
+    </div>
+    <div class="instructions">
+      Click a column to drop your disc. Connect four in a row to win!
+    </div>
+  </div>
+
+<script>
+const ROWS = 6, COLS = 7;
+const boardEl = document.getElementById('board');
+const colIndicator = document.getElementById('colIndicator');
+const statusEl = document.getElementById('status');
+const playerScoreEl = document.getElementById('playerScore');
+const aiScoreEl = document.getElementById('aiScore');
+const drawsEl = document.getElementById('draws');
+const newGameBtn = document.getElementById('newGameBtn');
+const resetBtn = document.getElementById('resetBtn');
+
+let grid, currentPlayer, gameActive, playerScore, aiScore, draws, aiThinking;
+
+function init() {
+  playerScore = parseInt(localStorage.getItem('c4Player')) || 0;
+  aiScore = parseInt(localStorage.getItem('c4AI')) || 0;
+  draws = parseInt(localStorage.getItem('c4Draws')) || 0;
+  updateScores();
+  newGame();
+}
+
+function newGame() {
+  grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+  currentPlayer = 1; // 1 = red (human), 2 = yellow (AI)
+  gameActive = true;
+  aiThinking = false;
+  renderBoard();
+  statusEl.textContent = "Your turn — drop a red disc!";
+}
+
+function renderBoard() {
+  boardEl.innerHTML = '';
+  colIndicator.innerHTML = '';
+  for (let c = 0; c < COLS; c++) {
+    const arrow = document.createElement('div');
+    arrow.className = 'col-arrow';
+    arrow.textContent = '▼';
+    arrow.dataset.col = c;
+    arrow.addEventListener('click', () => handleClick(c));
+    arrow.addEventListener('mouseenter', () => arrow.classList.add('active'));
+    arrow.addEventListener('mouseleave', () => arrow.classList.remove('active'));
+    colIndicator.appendChild(arrow);
+  }
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.row = r;
+      cell.dataset.col = c;
+      if (grid[r][c] === 1) cell.classList.add('red');
+      else if (grid[r][c] === 2) cell.classList.add('yellow');
+      cell.addEventListener('click', () => handleClick(c));
+      boardEl.appendChild(cell);
+    }
+  }
+}
+
+function handleClick(col) {
+  if (!gameActive || currentPlayer !== 1 || aiThinking) return;
+  if (!dropDisc(col, 1)) return;
+  renderBoard();
+
+  const win = checkWin(1);
+  if (win) {
+    highlightWin(win);
+    statusEl.textContent = "🎉 You win!";
+    gameActive = false;
+    playerScore++;
+    saveScores();
+    return;
+  }
+  if (isFull()) {
+    statusEl.textContent = "It's a draw!";
+    gameActive = false;
+    draws++;
+    saveScores();
+    return;
+  }
+
+  currentPlayer = 2;
+  statusEl.textContent = "AI is thinking...";
+  aiThinking = true;
+  setTimeout(aiMove, 400);
+}
+
+function dropDisc(col, player) {
+  for (let r = ROWS - 1; r >= 0; r--) {
+    if (grid[r][col] === 0) {
+      grid[r][col] = player;
+      return true;
+    }
+  }
+  return false;
+}
+
+function undoDrop(col) {
+  for (let r = 0; r < ROWS; r++) {
+    if (grid[r][col] !== 0) {
+      grid[r][col] = 0;
+      return;
+    }
+  }
+}
+
+function isFull() {
+  return grid[0].every(c => c !== 0);
+}
+
+function checkWin(player) {
+  const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (grid[r][c] !== player) continue;
+      for (const [dr, dc] of dirs) {
+        const cells = [];
+        let ok = true;
+        for (let i = 0; i < 4; i++) {
+          const nr = r + dr * i, nc = c + dc * i;
+          if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS || grid[nr][nc] !== player) { ok = false; break; }
+          cells.push([nr, nc]);
+        }
+        if (ok) return cells;
+      }
+    }
+  }
+  return null;
+}
+
+function highlightWin(cells) {
+  cells.forEach(([r, c]) => {
+    const idx = r * COLS + c;
+    boardEl.children[idx].classList.add('win');
+  });
+}
+
+function scorePosition(player) {
+  let sc = 0;
+  const opp = player === 1 ? 2 : 1;
+
+  function evalWindow(window) {
+    const p = window.filter(v => v === player).length;
+    const o = window.filter(v => v === opp).length;
+    const e = window.filter(v => v === 0).length;
+    if (p === 4) return 100;
+    if (p === 3 && e === 1) return 5;
+    if (p === 2 && e === 2) return 2;
+    if (o === 3 && e === 1) return -4;
+    return 0;
+  }
+
+  // Center preference
+  for (let r = 0; r < ROWS; r++) {
+    if (grid[r][3] === player) sc += 3;
+  }
+
+  // Horizontal
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c <= COLS - 4; c++)
+      sc += evalWindow([grid[r][c], grid[r][c+1], grid[r][c+2], grid[r][c+3]]);
+
+  // Vertical
+  for (let c = 0; c < COLS; c++)
+    for (let r = 0; r <= ROWS - 4; r++)
+      sc += evalWindow([grid[r][c], grid[r+1][c], grid[r+2][c], grid[r+3][c]]);
+
+  // Diagonals
+  for (let r = 0; r <= ROWS - 4; r++)
+    for (let c = 0; c <= COLS - 4; c++)
+      sc += evalWindow([grid[r][c], grid[r+1][c+1], grid[r+2][c+2], grid[r+3][c+3]]);
+
+  for (let r = 3; r < ROWS; r++)
+    for (let c = 0; c <= COLS - 4; c++)
+      sc += evalWindow([grid[r][c], grid[r-1][c+1], grid[r-2][c+2], grid[r-3][c+3]]);
+
+  return sc;
+}
+
+function getValidCols() {
+  const cols = [];
+  for (let c = 0; c < COLS; c++) if (grid[0][c] === 0) cols.push(c);
+  return cols;
+}
+
+function minimax(depth, alpha, beta, maximizing) {
+  const valid = getValidCols();
+  const w1 = checkWin(1), w2 = checkWin(2);
+  if (w2) return [null, 100000 + depth];
+  if (w1) return [null, -100000 - depth];
+  if (valid.length === 0) return [null, 0];
+  if (depth === 0) return [null, scorePosition(2)];
+
+  if (maximizing) {
+    let best = -Infinity, bestCol = valid[Math.floor(Math.random() * valid.length)];
+    for (const c of valid) {
+      dropDisc(c, 2);
+      const s = minimax(depth - 1, alpha, beta, false)[1];
+      undoDrop(c);
+      if (s > best) { best = s; bestCol = c; }
+      alpha = Math.max(alpha, best);
+      if (alpha >= beta) break;
+    }
+    return [bestCol, best];
+  } else {
+    let best = Infinity, bestCol = valid[Math.floor(Math.random() * valid.length)];
+    for (const c of valid) {
+      dropDisc(c, 1);
+      const s = minimax(depth - 1, alpha, beta, true)[1];
+      undoDrop(c);
+      if (s < best) { best = s; bestCol = c; }
+      beta = Math.min(beta, best);
+      if (alpha >= beta) break;
+    }
+    return [bestCol, best];
+  }
+}
+
+function aiMove() {
+  if (!gameActive) { aiThinking = false; return; }
+
+  // Check if AI can win immediately
+  const valid = getValidCols();
+  for (const c of valid) {
+    dropDisc(c, 2);
+    if (checkWin(2)) { undoDrop(c); dropDisc(c, 2); finishAI(c); return; }
+    undoDrop(c);
+  }
+  // Block player win
+  for (const c of valid) {
+    dropDisc(c, 1);
+    if (checkWin(1)) { undoDrop(c); dropDisc(c, 2); finishAI(c); return; }
+    undoDrop(c);
+  }
+
+  const [bestCol] = minimax(4, -Infinity, Infinity, true);
+  dropDisc(bestCol, 2);
+  finishAI(bestCol);
+}
+
+function finishAI() {
+  renderBoard();
+  aiThinking = false;
+  const win = checkWin(2);
+  if (win) {
+    highlightWin(win);
+    statusEl.textContent = "🤖 AI wins!";
+    gameActive = false;
+    aiScore++;
+    saveScores();
+    return;
+  }
+  if (isFull()) {
+    statusEl.textContent = "It's a draw!";
+    gameActive = false;
+    draws++;
+    saveScores();
+    return;
+  }
+  currentPlayer = 1;
+  statusEl.textContent = "Your turn — drop a red disc!";
+}
+
+function saveScores() {
+  localStorage.setItem('c4Player', playerScore);
+  localStorage.setItem('c4AI', aiScore);
+  localStorage.setItem('c4Draws', draws);
+  updateScores();
+}
+
+function updateScores() {
+  playerScoreEl.textContent = playerScore;
+  aiScoreEl.textContent = aiScore;
+  drawsEl.textContent = draws;
+}
+
+newGameBtn.addEventListener('click', newGame);
+resetBtn.addEventListener('click', () => {
+  playerScore = 0; aiScore = 0; draws = 0;
+  localStorage.removeItem('c4Player');
+  localStorage.removeItem('c4AI');
+  localStorage.removeItem('c4Draws');
+  updateScores();
+  newGame();
+});
+
+init();
+</script>
+</body>
+</html>
