@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2048 - GameHub</title>
+  <link rel="stylesheet" href="../../css/style.css">
+  <style>
+    .score-board {
+      display: flex;
+      gap: 1.5rem;
+      justify-content: center;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+    .score-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 0.4rem 1.5rem;
+      text-align: center;
+    }
+    .score-box .label {
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-family: 'Rajdhani', sans-serif;
+    }
+    .score-box .value {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.3rem;
+      color: var(--neon-green);
+    }
+    #board {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      padding: 8px;
+      background: var(--bg-primary);
+      border-radius: 12px;
+      width: 340px;
+      height: 340px;
+      position: relative;
+    }
+    .tile-cell {
+      background: rgba(255,255,255,0.04);
+      border-radius: 8px;
+    }
+    .tile {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+      border-radius: 8px;
+      transition: transform 0.12s ease;
+      animation: popIn 0.15s ease;
+    }
+    @keyframes popIn {
+      0% { transform: scale(0); }
+      70% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+    .tile[data-val="2"]    { background: #1a1a4e; color: #aaaadd; font-size: 1.5rem; }
+    .tile[data-val="4"]    { background: #1e1e5a; color: #bbbbee; font-size: 1.5rem; }
+    .tile[data-val="8"]    { background: #2a2068; color: var(--neon-blue); font-size: 1.5rem; }
+    .tile[data-val="16"]   { background: #302878; color: #55ddff; font-size: 1.4rem; }
+    .tile[data-val="32"]   { background: #3a2088; color: var(--neon-pink); font-size: 1.4rem; }
+    .tile[data-val="64"]   { background: #4a1898; color: #ff44cc; font-size: 1.4rem; }
+    .tile[data-val="128"]  { background: #5510a8; color: var(--neon-green); font-size: 1.2rem; }
+    .tile[data-val="256"]  { background: #6008b8; color: #44ffaa; font-size: 1.2rem; }
+    .tile[data-val="512"]  { background: #7000c8; color: var(--neon-yellow); font-size: 1.2rem; }
+    .tile[data-val="1024"] { background: #8000d0; color: #ffee44; font-size: 1rem; }
+    .tile[data-val="2048"] { background: linear-gradient(135deg, var(--neon-blue), var(--neon-pink)); color: #fff; font-size: 1rem; box-shadow: 0 0 20px rgba(0,212,255,0.6); }
+    .tile.super            { background: linear-gradient(135deg, var(--neon-pink), var(--neon-green)); color: #fff; font-size: 0.9rem; box-shadow: 0 0 20px rgba(255,0,170,0.6); }
+    .status-message {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.3rem;
+      margin-top: 1rem;
+      min-height: 2rem;
+      text-align: center;
+    }
+    .instructions {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      margin-top: 0.5rem;
+      text-align: center;
+    }
+    @media (max-width: 400px) {
+      #board { width: 280px; height: 280px; gap: 6px; padding: 6px; }
+      .tile { font-size: 1rem !important; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <a href="../../index.html" class="logo">Game<span>Hub</span></a>
+    <a href="../../index.html" class="nav-back">← Back to Games</a>
+  </nav>
+
+  <div class="game-container">
+    <div class="game-header">
+      <h1>🔢 2048</h1>
+    </div>
+
+    <div class="score-board">
+      <div class="score-box"><div class="label">Score</div><div class="value" id="score">0</div></div>
+      <div class="score-box"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+
+    <div class="game-area">
+      <div id="board"></div>
+    </div>
+
+    <div class="status-message" id="status"></div>
+
+    <div class="game-controls">
+      <button class="btn btn-primary" id="restartBtn">New Game</button>
+    </div>
+
+    <p class="instructions">Use arrow keys or swipe to move tiles</p>
+  </div>
+
+  <script>
+    const SIZE = 4;
+    let grid, score, bestScore, gameActive;
+
+    const boardEl = document.getElementById('board');
+    const scoreEl = document.getElementById('score');
+    const bestEl = document.getElementById('best');
+    const statusEl = document.getElementById('status');
+
+    bestScore = parseInt(localStorage.getItem('2048_best') || '0');
+    bestEl.textContent = bestScore;
+
+    document.getElementById('restartBtn').addEventListener('click', initGame);
+    document.addEventListener('keydown', handleKey);
+
+    // Swipe support
+    let touchStartX, touchStartY;
+    boardEl.addEventListener('touchstart', e => {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+    boardEl.addEventListener('touchend', e => {
+      if (!touchStartX) return;
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      const dy = e.changedTouches[0].clientY - touchStartY;
+      const absDx = Math.abs(dx), absDy = Math.abs(dy);
+      if (Math.max(absDx, absDy) < 30) return;
+      if (absDx > absDy) {
+        move(dx > 0 ? 'right' : 'left');
+      } else {
+        move(dy > 0 ? 'down' : 'up');
+      }
+      touchStartX = null;
+    }, { passive: true });
+
+    function initGame() {
+      grid = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
+      score = 0;
+      gameActive = true;
+      scoreEl.textContent = '0';
+      statusEl.textContent = '';
+      statusEl.style.color = '';
+      addRandomTile();
+      addRandomTile();
+      render();
+    }
+
+    function addRandomTile() {
+      const empty = [];
+      for (let r = 0; r < SIZE; r++)
+        for (let c = 0; c < SIZE; c++)
+          if (grid[r][c] === 0) empty.push([r, c]);
+      if (empty.length === 0) return;
+      const [r, c] = empty[Math.floor(Math.random() * empty.length)];
+      grid[r][c] = Math.random() < 0.9 ? 2 : 4;
+    }
+
+    function render() {
+      boardEl.innerHTML = '';
+      for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+          const cellDiv = document.createElement('div');
+          cellDiv.className = 'tile-cell';
+          if (grid[r][c] !== 0) {
+            const tile = document.createElement('div');
+            tile.className = 'tile';
+            const val = grid[r][c];
+            tile.dataset.val = val;
+            if (val > 2048) tile.classList.add('super');
+            tile.textContent = val;
+            cellDiv.appendChild(tile);
+          }
+          boardEl.appendChild(cellDiv);
+        }
+      }
+      scoreEl.textContent = score;
+      if (score > bestScore) {
+        bestScore = score;
+        bestEl.textContent = bestScore;
+        localStorage.setItem('2048_best', String(bestScore));
+      }
+    }
+
+    function handleKey(e) {
+      if (!gameActive) return;
+      const keyMap = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
+      if (keyMap[e.key]) {
+        e.preventDefault();
+        move(keyMap[e.key]);
+      }
+    }
+
+    function move(dir) {
+      if (!gameActive) return;
+      const prev = JSON.stringify(grid);
+      if (dir === 'left') moveLeft();
+      else if (dir === 'right') moveRight();
+      else if (dir === 'up') moveUp();
+      else if (dir === 'down') moveDown();
+
+      if (JSON.stringify(grid) !== prev) {
+        addRandomTile();
+        render();
+        if (hasWon()) {
+          statusEl.textContent = '🎉 You reached 2048!';
+          statusEl.style.color = 'var(--neon-green)';
+        }
+        if (!canMove()) {
+          gameActive = false;
+          statusEl.textContent = '😞 Game Over!';
+          statusEl.style.color = 'var(--neon-pink)';
+        }
+      }
+    }
+
+    function slideAndMerge(line) {
+      let arr = line.filter(v => v !== 0);
+      for (let i = 0; i < arr.length - 1; i++) {
+        if (arr[i] === arr[i + 1]) {
+          arr[i] *= 2;
+          score += arr[i];
+          arr.splice(i + 1, 1);
+        }
+      }
+      while (arr.length < SIZE) arr.push(0);
+      return arr;
+    }
+
+    function moveLeft() {
+      for (let r = 0; r < SIZE; r++) grid[r] = slideAndMerge(grid[r]);
+    }
+    function moveRight() {
+      for (let r = 0; r < SIZE; r++) grid[r] = slideAndMerge(grid[r].reverse()).reverse();
+    }
+    function moveUp() {
+      for (let c = 0; c < SIZE; c++) {
+        let col = [grid[0][c], grid[1][c], grid[2][c], grid[3][c]];
+        col = slideAndMerge(col);
+        for (let r = 0; r < SIZE; r++) grid[r][c] = col[r];
+      }
+    }
+    function moveDown() {
+      for (let c = 0; c < SIZE; c++) {
+        let col = [grid[3][c], grid[2][c], grid[1][c], grid[0][c]];
+        col = slideAndMerge(col);
+        for (let r = 0; r < SIZE; r++) grid[r][c] = col[SIZE - 1 - r];
+      }
+    }
+
+    function hasWon() {
+      for (let r = 0; r < SIZE; r++)
+        for (let c = 0; c < SIZE; c++)
+          if (grid[r][c] === 2048) return true;
+      return false;
+    }
+
+    function canMove() {
+      for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+          if (grid[r][c] === 0) return true;
+          if (c < SIZE - 1 && grid[r][c] === grid[r][c + 1]) return true;
+          if (r < SIZE - 1 && grid[r][c] === grid[r + 1][c]) return true;
+        }
+      }
+      return false;
+    }
+
+    initGame();
+  </script>
+</body>
+</html>
